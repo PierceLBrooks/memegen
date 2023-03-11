@@ -4,9 +4,12 @@
 import io
 import os
 import sys
+import json
 import yaml
 import base64
+import random
 import zipfile
+import subprocess
 from PIL import Image, ImageDraw, ImageFont, ImageSequence
 
 archive = None
@@ -80,6 +83,61 @@ def run(script, target, font, labels):
             extensions[extension] += 1
             images[prefix].append(key)
     print(str(extensions))
+    if ((target.endswith(".json")) and (os.path.exists(target))):
+        descriptor = open(target, "r")
+        target = descriptor.read()
+        descriptor.close()
+        target = json.loads(target)
+        index = -1
+        template = int(random.randint(0, len(templates))%len(templates))
+        key = list(templates.keys())[template]
+        template = templates[key]
+        while (index < 0):
+            index = int(random.randint(0, len(target))%len(target))
+            try:
+                if not (len(target[index]["text"]) == len(template["text"])):
+                    index = -1
+            except:
+                index = -1
+        print(str(template))
+        command = []
+        image = None
+        overlay = ""
+        extension = ""
+        link = "https://api.memegen.link/images/"
+        link += key
+        link += "/"
+        for i in range(len(target)):
+            lines = target[i]
+            if not (i == index):
+                continue
+            if ("overlay" in lines):
+                overlay += lines["overlay"]
+            if ("text" in lines):
+                lines = lines["text"]
+                for j in range(len(lines)):
+                    line = lines[j]
+                    link += line.replace(" ", "_")
+                    if not (j == len(lines)-1):
+                        link += "/"
+        for i in range(len(images[key])):
+            if (images[key][i][(len(key)+1):].startswith("default")):
+                image = images[key][i]
+                break
+        if not (image == None):
+            extension += image[image.rindex("."):].lower()
+            link += extension
+        if not (len(overlay) == 0):
+            link += "?style="
+            link += overlay
+        command.append("curl")
+        command.append(link)
+        command.append("-o")
+        command.append(os.path.join(os.getcwd(), key+"_"+str(index)+extension))
+        print(str(command))
+        result = subprocess.check_output(command)
+        print(result.decode())
+        return 2
     if not (target in templates):
         return -1
     template = templates[target]
@@ -101,10 +159,12 @@ def run(script, target, font, labels):
             break
     if (image == None):
         return -5
-    if not (os.path.exists(font)):
+    if (len(font) == 0):
         return -6
-    if not (font.endswith(".ttf")):
+    if not (os.path.exists(font)):
         return -7
+    if not (font.endswith(".ttf")):
+        return -8
     extension = image[(image.rindex(".")+1):].lower()
     frames = []
     image = zf.read(files[image])
@@ -144,17 +204,19 @@ def run(script, target, font, labels):
     return 1
 
 def launch(arguments):
-    if (len(arguments) < 3):
+    if (len(arguments) < 2):
         return False
+    font = ""
+    labels = None
     script = arguments[0]
     target = arguments[1]
-    font = arguments[2]
-    labels = None
-    if (len(arguments) > 3):
-        labels = arguments[3:]
+    if (len(arguments) > 2):
+        font += arguments[2]
+        if (len(arguments) > 3):
+            labels = arguments[3:]
     result = run(script, target, font, labels)
     print(str(result))
-    if not (result > 0):
+    if (result > 0):
         return True
     return False
 
